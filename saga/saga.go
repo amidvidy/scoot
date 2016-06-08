@@ -113,6 +113,31 @@ func (s Saga) EndCompensatingTask(state *SagaState, taskId string, results []byt
 }
 
 /*
+ * Should be called at Saga Creation time.
+ * Returns a Slice of In Progress SagaIds
+ */
+func (s Saga) Startup() ([]string, error) {
+
+	ids, err := s.log.GetActiveSagas()
+	if err != nil {
+		return nil, err
+	}
+
+	return ids, nil
+}
+
+/*
+ * Recovers SagaState by reading all logged messages from the log.
+ * Utilizes the specified recoveryType to determine if Saga needs to be
+ * Aborted or can proceed safely.
+ *
+ * Returns the current SagaState
+ */
+func (s Saga) RecoverSagaState(sagaId string, recoveryType SagaRecoveryType) (*SagaState, error) {
+	return recoverState(sagaId, s, recoveryType)
+}
+
+/*
  * logs the specified message durably to the SagaLog & updates internal state if its a valid state transition
  */
 func (s Saga) logMessage(state *SagaState, msg sagaMessage) (*SagaState, error) {

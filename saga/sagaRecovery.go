@@ -22,7 +22,7 @@ const (
 )
 
 /*
- * Recreates a SagaState from a set of messages.
+ * Recovers SagaState from SagaLog messages
  */
 func recoverState(sagaId string, saga Saga, recoveryType SagaRecoveryType) (*SagaState, error) {
 

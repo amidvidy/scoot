@@ -69,3 +69,16 @@ func (log *inMemorySagaLog) GetMessages(sagaId string) ([]sagaMessage, error) {
 		return nil, nil
 	}
 }
+
+func (log *inMemorySagaLog) GetActiveSagas() ([]string, error) {
+	log.mutex.RLock()
+	keys := make([]string, len(log.sagas), 0)
+
+	for key, _ := range log.sagas {
+		keys = append(keys, key)
+	}
+
+	log.mutex.Unlock()
+
+	return keys, nil
+}
