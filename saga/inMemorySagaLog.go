@@ -70,15 +70,18 @@ func (log *inMemorySagaLog) GetMessages(sagaId string) ([]sagaMessage, error) {
 	}
 }
 
+/*
+ * Returns all Sagas Started since this InMemory Saga was created
+ */
 func (log *inMemorySagaLog) GetActiveSagas() ([]string, error) {
 	log.mutex.RLock()
-	keys := make([]string, len(log.sagas), 0)
+	keys := make([]string, 0, len(log.sagas))
 
 	for key, _ := range log.sagas {
 		keys = append(keys, key)
 	}
 
-	log.mutex.Unlock()
+	log.mutex.RUnlock()
 
 	return keys, nil
 }

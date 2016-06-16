@@ -411,3 +411,39 @@ func TestRecoverSagaState_ReturnsError(t *testing.T) {
 		t.Error("expected returned state to be nil when error occurs")
 	}
 }
+
+func TestGetActiveSaga_Successful(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	sagaLogMock := NewMockSagaLog(mockCtrl)
+	sagaLogMock.EXPECT().GetActiveSagas().Return([]string{"saga1", "saga2", "saga3"}, nil)
+
+	s := MakeSaga(sagaLogMock)
+	ids, err := s.GetActiveSagas()
+
+	if err != nil {
+		t.Error("unexpected err", err)
+	}
+
+	if ids == nil {
+		t.Error("unexpected ids to be returned")
+	}
+}
+
+func TestGetActiveSaga_Error(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	sagaLogMock := NewMockSagaLog(mockCtrl)
+	sagaLogMock.EXPECT().GetActiveSagas().Return(nil, errors.New("Test Error!"))
+
+	s := MakeSaga(sagaLogMock)
+	ids, err := s.GetActiveSagas()
+
+	if err == nil {
+		t.Error("expected error")
+	}
+
+	if ids != nil {
+		t.Error("unexpected ids returned, should return nil on error")
+	}
+}

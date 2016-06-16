@@ -138,6 +138,13 @@ func (s Saga) RecoverSagaState(sagaId string, recoveryType SagaRecoveryType) (*S
 }
 
 /*
+ * Returns a list of active SagaIds or an error
+ */
+func (s Saga) GetActiveSagas() ([]string, error) {
+	return s.log.GetActiveSagas()
+}
+
+/*
  * logs the specified message durably to the SagaLog & updates internal state if its a valid state transition
  */
 func (s Saga) logMessage(state *SagaState, msg sagaMessage) (*SagaState, error) {
