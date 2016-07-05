@@ -118,7 +118,7 @@ func updateCluster(dist *PoolDistributor, updateCh <-chan cm.NodeUpdate) {
 //
 // Retrieve a Node to Do Work for this Particular Job
 //
-func (dist *PoolDistributor) ReserveNode(work sched.Job) cm.Node {
+func (dist *PoolDistributor) ReserveNode() cm.Node {
 	node := <-dist.freeCh
 
 	// Check if the nodes we just got has been marked for removal
