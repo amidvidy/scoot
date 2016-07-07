@@ -60,26 +60,6 @@ func recoverState(sagaId string, saga Saga, recoveryType SagaRecoveryType) (*Sag
 		}
 	}
 
-	// Check if we can safely proceed forward based on recovery method
-	// RollbackRecovery must check if in a SafeState,
-	// ForwardRecovery can always make progress
-	switch recoveryType {
-
-	case RollbackRecovery:
-
-		// if Saga is not in a safe state we must abort the saga
-		// And compensating tasks should start
-		if !isSagaInSafeState(state) {
-			state, err = saga.AbortSaga(state)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-	case ForwardRecovery:
-
-	}
-
 	return state, nil
 }
 

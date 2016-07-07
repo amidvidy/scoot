@@ -119,7 +119,7 @@ func TestRecoverState_SuccessfulForwardRecovery(t *testing.T) {
 	sagaLogMock.EXPECT().GetMessages(sagaId).Return(msgs, nil)
 	saga := MakeSaga(sagaLogMock)
 
-	state, err := recoverState(sagaId, saga, ForwardRecovery)
+	state, err := saga.RecoverSagaState(sagaId, ForwardRecovery)
 
 	if err != nil {
 		t.Errorf("Expected error to be nil %s", err)
@@ -194,7 +194,7 @@ func TestRecoverState_SuccessfulRollbackRecovery(t *testing.T) {
 	sagaLogMock.EXPECT().LogMessage(MakeAbortSagaMessage(sagaId))
 	saga := MakeSaga(sagaLogMock)
 
-	state, err := recoverState(sagaId, saga, RollbackRecovery)
+	state, err := saga.RecoverSagaState(sagaId, RollbackRecovery)
 
 	if err != nil {
 		t.Errorf("Expected error to be nil %s", err)
