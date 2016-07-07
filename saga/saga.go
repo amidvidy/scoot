@@ -6,7 +6,9 @@ package saga
  * which returns a saga based on its implementation.
  */
 type Saga struct {
-	log SagaLog
+	log           SagaLog
+	sagaStateMap  map[string]*SagaState
+	sagaUpdateMap map[string]chan sagaUpdate
 }
 
 /*
@@ -14,7 +16,9 @@ type Saga struct {
  */
 func MakeSaga(log SagaLog) Saga {
 	return Saga{
-		log: log,
+		log:           log,
+		sagaStateMap:  make(map[string]*SagaState),
+		sagaUpdateMap: make(map[string]chan sagaUpdate),
 	}
 }
 
@@ -23,6 +27,8 @@ func MakeSaga(log SagaLog) Saga {
  * Returns the resulting SagaState or an error if it fails.
  */
 func (s Saga) StartSaga(sagaId string, job []byte) (*SagaState, error) {
+
+	//TODO: Check that Saga doesn't arleady exist
 
 	//Create new SagaState
 	state, err := makeSagaState(sagaId, job)
@@ -36,7 +42,46 @@ func (s Saga) StartSaga(sagaId string, job []byte) (*SagaState, error) {
 		return nil, err
 	}
 
+	// setup internal saga state for processing updates for this saga
+	updateCh := make(chan sagaUpdate, 0)
+	s.sagaUpdateMap[sagaId] = updateCh
+	s.sagaStateMap[sagaId] = state
+	go s.updateSagaState(sagaId, updateCh)
+
 	return state, nil
+}
+
+type sagaUpdateResult struct {
+	state *SagaState
+	err   error
+}
+
+type sagaUpdate struct {
+	state    *SagaState
+	msg      sagaMessage
+	loggedCh chan sagaUpdateResult
+}
+
+func (s Saga) updateSagaState(sagaId string, updateCh chan sagaUpdate) {
+
+	for update := range updateCh {
+		currState, _ := s.sagaStateMap[sagaId]
+
+		newState, err := s.logMessage(currState, update.msg)
+
+		if err == nil {
+			s.sagaStateMap[sagaId] = newState
+			update.loggedCh <- sagaUpdateResult{
+				state: newState,
+				err:   nil,
+			}
+		} else {
+			update.loggedCh <- sagaUpdateResult{
+				state: nil,
+				err:   err,
+			}
+		}
+	}
 }
 
 /*
