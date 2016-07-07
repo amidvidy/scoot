@@ -1,5 +1,9 @@
 package saga
 
+import (
+	"sync"
+)
+
 //
 // Saga Object which provides all Saga Functionality
 // Implementations of SagaLog should provide a factory method
@@ -9,6 +13,7 @@ type Saga struct {
 	log           SagaLog
 	sagaStateMap  map[string]*SagaState
 	sagaUpdateMap map[string]chan sagaUpdate
+	mutex         *sync.RWMutex
 }
 
 //
@@ -19,6 +24,7 @@ func MakeSaga(log SagaLog) Saga {
 		log:           log,
 		sagaStateMap:  make(map[string]*SagaState),
 		sagaUpdateMap: make(map[string]chan sagaUpdate),
+		mutex:         &sync.RWMutex{},
 	}
 }
 
@@ -197,8 +203,12 @@ func (s Saga) logMessage(state *SagaState, msg sagaMessage) (*SagaState, error) 
 // spins off a go routine to process updates as they come in
 func (s Saga) initializeSagaUpdate(sagaId string, state *SagaState) {
 	updateCh := make(chan sagaUpdate, 0)
+
+	s.mutex.Lock()
 	s.sagaUpdateMap[sagaId] = updateCh
 	s.sagaStateMap[sagaId] = state
+	s.mutex.Unlock()
+
 	go s.updateSagaStateLoop(sagaId, updateCh)
 }
 
@@ -220,16 +230,24 @@ type sagaUpdate struct {
 func (s Saga) updateSagaStateLoop(sagaId string, updateCh chan sagaUpdate) {
 
 	for update := range updateCh {
+
+		s.mutex.RLock()
 		currState, _ := s.sagaStateMap[sagaId]
+		s.mutex.RUnlock()
 
 		newState, err := s.logMessage(currState, update.msg)
 
 		if err == nil {
+
+			s.mutex.Lock()
 			s.sagaStateMap[sagaId] = newState
+			s.mutex.Unlock()
+
 			update.resultCh <- sagaUpdateResult{
 				state: newState,
 				err:   nil,
 			}
+
 		} else {
 			update.resultCh <- sagaUpdateResult{
 				state: nil,
@@ -242,8 +260,11 @@ func (s Saga) updateSagaStateLoop(sagaId string, updateCh chan sagaUpdate) {
 // adds a message for updateSagaStateLoop to execute to the channel for the
 // specified saga.  blocks until the message has been applied
 func (s Saga) updateSagaState(sagaId string, msg sagaMessage) (*SagaState, error) {
+
+	s.mutex.RLock()
 	currState, _ := s.sagaStateMap[sagaId]
 	updateCh, _ := s.sagaUpdateMap[sagaId]
+	s.mutex.RUnlock()
 
 	//TODO: check not ok means saga doesn't exist
 

@@ -12,46 +12,48 @@ import (
 const MAX_RETRY = 3
 
 type jobRunner struct {
-	job       sched.Job
-	saga      saga.Saga
-	sagaState *saga.SagaState
-	dist      *dist.PoolDistributor
-
-	updateChan chan stateUpdate
-	wg         sync.WaitGroup
+	job              sched.Job
+	saga             saga.Saga
+	sagaId           string
+	initialSagaState *saga.SagaState
+	dist             *dist.PoolDistributor
+	wg               sync.WaitGroup
 }
 
 func NewJobRunner(job sched.Job, saga saga.Saga, sagaState *saga.SagaState, nodes []cm.Node) jobRunner {
 	jr := jobRunner{
-		job:        job,
-		saga:       saga,
-		sagaState:  sagaState,
-		dist:       dist.NewPoolDistributor(cm.StaticClusterFactory(nodes)),
-		updateChan: make(chan stateUpdate, 0),
+		job:              job,
+		saga:             saga,
+		sagaId:           sagaState.SagaId(),
+		initialSagaState: sagaState,
+		dist:             dist.NewPoolDistributor(cm.StaticClusterFactory(nodes)),
 	}
 
-	go jr.updateSagaState()
+	//go jr.updateSagaState()
 	return jr
 }
 
 // Runs the Job associated with this JobRunner to completion
 func (jr jobRunner) runJob() {
 	// don't re-run an already completed saga
-	if jr.sagaState.IsSagaCompleted() {
+	if jr.initialSagaState.IsSagaCompleted() {
 		return
 	}
 
 	// if the saga has not been aborted, just run each task in the saga
 	// TODO: this can be made smarter to run the next Best Task instead of just
 	// the next one in order etc....
-	if !jr.sagaState.IsSagaAborted() {
+	if !jr.initialSagaState.IsSagaAborted() {
 		for _, task := range jr.job.Tasks {
 
-			if !jr.sagaState.IsTaskCompleted(task.Id) {
+			if !jr.initialSagaState.IsTaskCompleted(task.Id) {
 				node := jr.dist.ReserveNode()
 
 				// Put StartTask Message on SagaLog
-				jr.logSagaMessage(saga.StartTask, task.Id, nil)
+				_, err := jr.saga.StartTask(jr.sagaId, task.Id, nil)
+				if err != nil {
+					handleSagaLogErrors(err)
+				}
 
 				jr.wg.Add(1)
 				go func(node cm.Node, task sched.Task) {
@@ -69,7 +71,11 @@ func (jr jobRunner) runJob() {
 						}
 					}
 
-					jr.logSagaMessage(saga.EndTask, task.Id, nil)
+					_, err := jr.saga.EndTask(jr.sagaId, task.Id, nil)
+					if err != nil {
+						handleSagaLogErrors(err)
+					}
+
 				}(node, task)
 			}
 		}
@@ -84,81 +90,97 @@ func (jr jobRunner) runJob() {
 	jr.wg.Wait()
 
 	// Log EndSaga Message to SagaLog
-	jr.logSagaMessage(saga.EndSaga, "", nil)
+	_, err := jr.saga.EndSaga(jr.sagaId)
+	if err != nil {
+		handleSagaLogErrors(err)
+	}
 
 	return
 }
 
-type stateUpdate struct {
-	msgType  saga.SagaMessageType
-	taskId   string
-	data     []byte
-	loggedCh chan bool
+func handleSagaLogErrors(err error) {
+	if retryableErr(err) {
+		// TODO: Implement deadletter queue.  SagaLog is failing to store this message some reason,
+		// Could be bad message or could be because the log is unavailable.  Put on Deadletter Queue and Move On
+		// For now just panic, for Alpha (all in memory this SHOULD never happen)
+		panic(fmt.Sprintf("Failed to succeesfully Write to SagaLog this Job should be put on the deadletter queue.  Err: %v", err))
+	} else {
+		// Something is really wrong.  Either an Invalid State Transition, or we formatted the request to the SagaLog incorrectly
+		// These errors indicate a fatal bug in our code.  So we should panic.
+		panic(fmt.Sprintf("Fatal Error Writing to SagaLog.  Err: %v", err))
+	}
 }
+
+// type stateUpdate struct {
+// 	msgType  saga.SagaMessageType
+// 	taskId   string
+// 	data     []byte
+// 	loggedCh chan bool
+// }
 
 // Logs the message durably to the sagalog and updates the state.  Blocks until the message
 // has been durably logged
-func (jr jobRunner) logSagaMessage(msgType saga.SagaMessageType, taskId string, data []byte) {
-	update := stateUpdate{
-		msgType:  msgType,
-		taskId:   taskId,
-		data:     data,
-		loggedCh: make(chan bool, 0),
-	}
+// func (jr jobRunner) logSagaMessage(msgType saga.SagaMessageType, taskId string, data []byte) {
+// 	update := stateUpdate{
+// 		msgType:  msgType,
+// 		taskId:   taskId,
+// 		data:     data,
+// 		loggedCh: make(chan bool, 0),
+// 	}
 
-	jr.updateChan <- update
+// 	jr.updateChan <- update
 
-	// wait for update to complete before returning
-	<-update.loggedCh
-	return
-}
+// 	// wait for update to complete before returning
+// 	<-update.loggedCh
+// 	return
+// }
 
 // handles all the sagaState updates
-func (jr jobRunner) updateSagaState() {
+// func (jr jobRunner) updateSagaState() {
 
-	var err error
-	var state *saga.SagaState
+// 	var err error
+// 	var state *saga.SagaState
 
-	for update := range jr.updateChan {
-		switch update.msgType {
-		case saga.StartTask:
-			state, err = jr.saga.StartTask(jr.sagaState, update.taskId, update.data)
+// 	for update := range jr.updateChan {
+// 		switch update.msgType {
+// 		case saga.StartTask:
+// 			state, err = jr.saga.StartTask(jr.sagaState, update.taskId, update.data)
 
-		case saga.EndTask:
-			state, err = jr.saga.EndTask(jr.sagaState, update.taskId, update.data)
+// 		case saga.EndTask:
+// 			state, err = jr.saga.EndTask(jr.sagaState, update.taskId, update.data)
 
-		case saga.StartCompTask:
-			state, err = jr.saga.StartCompensatingTask(jr.sagaState, update.taskId, update.data)
+// 		case saga.StartCompTask:
+// 			state, err = jr.saga.StartCompensatingTask(jr.sagaState, update.taskId, update.data)
 
-		case saga.EndCompTask:
-			state, err = jr.saga.EndCompensatingTask(jr.sagaState, update.taskId, update.data)
+// 		case saga.EndCompTask:
+// 			state, err = jr.saga.EndCompensatingTask(jr.sagaState, update.taskId, update.data)
 
-		case saga.EndSaga:
-			state, err = jr.saga.EndSaga(jr.sagaState)
+// 		case saga.EndSaga:
+// 			state, err = jr.saga.EndSaga(jr.sagaState)
 
-		case saga.AbortSaga:
-			state, err = jr.saga.AbortSaga(jr.sagaState)
-		}
+// 		case saga.AbortSaga:
+// 			state, err = jr.saga.AbortSaga(jr.sagaState)
+// 		}
 
-		// if state transition was successful update internal state
-		if err == nil {
-			jr.sagaState = state
-			update.loggedCh <- true
+// 		// if state transition was successful update internal state
+// 		if err == nil {
+// 			jr.sagaState = state
+// 			update.loggedCh <- true
 
-		} else {
-			if retryableErr(err) {
-				// TODO: Implement deadletter queue.  SagaLog is failing to store this message some reason,
-				// Could be bad message or could be because the log is unavailable.  Put on Deadletter Queue and Move On
-				// For now just panic, for Alpha (all in memory this SHOULD never happen)
-				panic(fmt.Sprintf("Failed to succeesfully log StartCompTask sagaId: %v, taskId: %v, this Job should be put on the deadletter queue", jr.sagaState.SagaId(), update.taskId))
-			} else {
-				// Something is really wrong.  Either an Invalid State Transition, or we formatted the request to the SagaLog incorrectly
-				// These errors indicate a fatal bug in our code.  So we should panic.
-				panic(fmt.Sprintf("Failed to succeesfully log StartCompTask. sagaId: %v, taskId: %v", jr.sagaState.SagaId(), update.taskId))
-			}
-		}
-	}
-}
+// 		} else {
+// 			if retryableErr(err) {
+// 				// TODO: Implement deadletter queue.  SagaLog is failing to store this message some reason,
+// 				// Could be bad message or could be because the log is unavailable.  Put on Deadletter Queue and Move On
+// 				// For now just panic, for Alpha (all in memory this SHOULD never happen)
+// 				panic(fmt.Sprintf("Failed to succeesfully log StartCompTask sagaId: %v, taskId: %v, this Job should be put on the deadletter queue", jr.sagaState.SagaId(), update.taskId))
+// 			} else {
+// 				// Something is really wrong.  Either an Invalid State Transition, or we formatted the request to the SagaLog incorrectly
+// 				// These errors indicate a fatal bug in our code.  So we should panic.
+// 				panic(fmt.Sprintf("Failed to succeesfully log StartCompTask. sagaId: %v, taskId: %v", jr.sagaState.SagaId(), update.taskId))
+// 			}
+// 		}
+// 	}
+// }
 
 // checks the error returned my updating saga state.
 func retryableErr(err error) bool {
