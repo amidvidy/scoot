@@ -28,8 +28,6 @@ func NewJobRunner(job sched.Job, saga saga.Saga, sagaState *saga.SagaState, node
 		initialSagaState: sagaState,
 		dist:             dist.NewPoolDistributor(cm.StaticClusterFactory(nodes)),
 	}
-
-	//go jr.updateSagaState()
 	return jr
 }
 
