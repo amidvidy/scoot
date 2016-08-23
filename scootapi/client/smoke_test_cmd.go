@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/scootdev/scoot/scootapi/gen-go/scoot"
-	"github.com/scootdev/scoot/scootapi/testhelpers"
+	"github.com/scootdev/scoot/tests/testhelpers"
 	"github.com/spf13/cobra"
 	"strconv"
 )
