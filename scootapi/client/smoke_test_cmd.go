@@ -27,7 +27,7 @@ func (c *Client) runSmokeTest(cmd *cobra.Command, args []string) error {
 
 	// run a bunch of concurrent jobs
 	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
 			err := c.generateAndRunJob()

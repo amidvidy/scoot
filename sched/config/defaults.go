@@ -22,7 +22,7 @@ func DefaultParser() *Parser {
 		Cluster: map[string]ClusterConfig{
 			"memory": &ClusterMemoryConfig{},
 			"static": &ClusterStaticConfig{},
-			"":       &ClusterMemoryConfig{Type: "memory", Count: 10},
+			"":       &ClusterMemoryConfig{Type: "memory", Count: 100},
 		},
 		Queue: map[string]QueueConfig{
 			"memory": &QueueMemoryConfig{},

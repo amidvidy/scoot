@@ -1,4 +1,4 @@
-package common
+package swarmtest
 
 import (
 	"errors"
@@ -24,9 +24,9 @@ type SwarmTest struct {
 
 func (s *SwarmTest) InitOptions(defaults map[string]interface{}) error {
 	d := map[string]interface{}{
-		"logdir":      "/tmp/scoot-swarmtest",
+		"logdir":      "",
 		"repo":        "$GOPATH/src/github.com/scootdev/scoot",
-		"num_workers": 5,
+		"num_workers": 10,
 	}
 	for key, val := range defaults {
 		d[key] = val
