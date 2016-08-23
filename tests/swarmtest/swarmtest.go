@@ -141,7 +141,7 @@ func (s *SwarmTest) run() error {
 	if err := s.RunCmd(false, "$GOPATH/bin/scheduler", args...); err != nil {
 		return err
 	}
-	return s.RunCmd(true, "$GOPATH/bin/scootapi", "run_smoke_test")
+	return s.RunCmd(true, "$GOPATH/bin/scootapi", "run_smoke_test", "10")
 }
 
 func (s *SwarmTest) Main() {

@@ -9,6 +9,7 @@ import (
 	"github.com/scootdev/scoot/scootapi/gen-go/scoot"
 	"github.com/scootdev/scoot/scootapi/testhelpers"
 	"github.com/spf13/cobra"
+	"strconv"
 )
 
 func makeSmokeTestCmd(c *Client) *cobra.Command {
@@ -25,9 +26,19 @@ func makeSmokeTestCmd(c *Client) *cobra.Command {
 func (c *Client) runSmokeTest(cmd *cobra.Command, args []string) error {
 	fmt.Println("Starting Smoke Test")
 
+	numTasks := 100
+
+	if (len(args)) > 0 {
+		var err error
+		numTasks, err = strconv.Atoi(args[0])
+		if err != nil {
+			return err
+		}
+	}
+
 	// run a bunch of concurrent jobs
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
+	for i := 0; i < numTasks; i++ {
 		wg.Add(1)
 		go func() {
 			err := c.generateAndRunJob()
